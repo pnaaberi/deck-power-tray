@@ -4,7 +4,14 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from deck_power_tray.app import BatteryReader, autostart_enabled, disable_autostart, enable_autostart, find_supplies
+from deck_power_tray.app import (
+    BatteryReader,
+    autostart_enabled,
+    disable_autostart,
+    enable_autostart,
+    find_supplies,
+    tray_icon_font_size,
+)
 
 
 def write(path: Path, text: str) -> None:
@@ -79,6 +86,11 @@ class BatteryReaderTests(unittest.TestCase):
     def test_disable_autostart_is_safe_when_missing(self):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertFalse(disable_autostart(Path(tmp) / "config"))
+
+    def test_tray_icon_font_is_scaled_2x(self):
+        self.assertEqual(tray_icon_font_size("9W"), 50)
+        self.assertEqual(tray_icon_font_size("8.5W"), 44)
+        self.assertEqual(tray_icon_font_size("12345W"), 36)
 
 
 if __name__ == "__main__":

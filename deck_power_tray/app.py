@@ -29,6 +29,10 @@ SAMPLE_SECONDS = 2
 HISTORY_SECONDS = 10 * 60
 MAX_SAMPLES = HISTORY_SECONDS // SAMPLE_SECONDS
 GRAPH_MAX_VALUE = 50.0
+TRAY_ICON_SCALE = 2
+TRAY_ICON_WIDTH = 96 * TRAY_ICON_SCALE
+TRAY_ICON_HEIGHT = 32 * TRAY_ICON_SCALE
+TRAY_TEXT_WIDTH = 78 * TRAY_ICON_SCALE
 SNI_IFACE = "org.kde.StatusNotifierItem"
 PROPS_IFACE = "org.freedesktop.DBus.Properties"
 WATCHER_BUS = "org.kde.StatusNotifierWatcher"
@@ -491,23 +495,29 @@ class TrayApp:
         self.tray.NewToolTip()
 
     def draw_icon(self, text: str, dot_color: str) -> None:
-        surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, 96, 32)
+        surface = cairo.ImageSurface(cairo.FORMAT_ARGB32, TRAY_ICON_WIDTH, TRAY_ICON_HEIGHT)
         ctx = cairo.Context(surface)
         ctx.set_source_rgba(0, 0, 0, 0)
         ctx.paint()
 
         ctx.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
-        ctx.set_font_size(25 if len(text) <= 3 else 22 if len(text) <= 4 else 18)
+        ctx.set_font_size(tray_icon_font_size(text))
         xb, yb, tw, th, _xa, _ya = ctx.text_extents(text)
         ctx.set_source_rgba(0, 0, 0, 0.58)
-        ctx.move_to((78 - tw) / 2 - xb + 2, (32 - th) / 2 - yb + 1)
+        ctx.move_to(
+            (TRAY_TEXT_WIDTH - tw) / 2 - xb + 2 * TRAY_ICON_SCALE,
+            (TRAY_ICON_HEIGHT - th) / 2 - yb + TRAY_ICON_SCALE,
+        )
         ctx.show_text(text)
         ctx.set_source_rgba(0.93, 0.95, 0.98, 0.98)
-        ctx.move_to((78 - tw) / 2 - xb + 1, (32 - th) / 2 - yb)
+        ctx.move_to(
+            (TRAY_TEXT_WIDTH - tw) / 2 - xb + TRAY_ICON_SCALE,
+            (TRAY_ICON_HEIGHT - th) / 2 - yb,
+        )
         ctx.show_text(text)
 
         ctx.set_source_rgb(*hex_to_rgb(dot_color))
-        ctx.arc(89, 16, 4.0, 0, math.tau)
+        ctx.arc(89 * TRAY_ICON_SCALE, 16 * TRAY_ICON_SCALE, 4.0 * TRAY_ICON_SCALE, 0, math.tau)
         ctx.fill()
         surface.flush()
         surface.write_to_png(str(self.icon_path))
@@ -537,6 +547,10 @@ def round_rect(ctx, x, y, w, h, r):
     ctx.arc(x + r, y + h - r, r, math.pi / 2, math.pi)
     ctx.arc(x + r, y + r, r, math.pi, 3 * math.pi / 2)
     ctx.close_path()
+
+
+def tray_icon_font_size(text: str) -> int:
+    return (25 if len(text) <= 3 else 22 if len(text) <= 4 else 18) * TRAY_ICON_SCALE
 
 
 def cairo_surface_to_sni_pixmap(surface: cairo.ImageSurface):
