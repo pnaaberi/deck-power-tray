@@ -31,8 +31,8 @@ MAX_SAMPLES = HISTORY_SECONDS // SAMPLE_SECONDS
 GRAPH_MAX_VALUE = 50.0
 TRAY_ICON_WIDTH = 64
 TRAY_ICON_HEIGHT = 64
-TRAY_STATUS_STRIP_WIDTH = 6
-TRAY_TEXT_WIDTH = TRAY_ICON_WIDTH - TRAY_STATUS_STRIP_WIDTH
+TRAY_STATUS_DOT_RADIUS = 5.0
+TRAY_TEXT_WIDTH = TRAY_ICON_WIDTH
 SNI_IFACE = "org.kde.StatusNotifierItem"
 PROPS_IFACE = "org.freedesktop.DBus.Properties"
 WATCHER_BUS = "org.kde.StatusNotifierWatcher"
@@ -516,7 +516,7 @@ class TrayApp:
         ctx.show_text(text)
 
         ctx.set_source_rgb(*hex_to_rgb(dot_color))
-        ctx.rectangle(TRAY_ICON_WIDTH - TRAY_STATUS_STRIP_WIDTH, 7, TRAY_STATUS_STRIP_WIDTH, 50)
+        ctx.arc(TRAY_ICON_WIDTH - 7, 9, TRAY_STATUS_DOT_RADIUS, 0, math.tau)
         ctx.fill()
         surface.flush()
         surface.write_to_png(str(self.icon_path))
