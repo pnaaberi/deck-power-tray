@@ -11,6 +11,7 @@ from deck_power_tray.app import (
     enable_autostart,
     find_supplies,
     tray_icon_font_size,
+    tray_icon_text,
 )
 
 
@@ -87,10 +88,12 @@ class BatteryReaderTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             self.assertFalse(disable_autostart(Path(tmp) / "config"))
 
-    def test_tray_icon_font_is_scaled_2x(self):
-        self.assertEqual(tray_icon_font_size("9W"), 50)
-        self.assertEqual(tray_icon_font_size("8.5W"), 44)
-        self.assertEqual(tray_icon_font_size("12345W"), 36)
+    def test_tray_icon_uses_compact_square_readout(self):
+        self.assertEqual(tray_icon_text(4.86), "4.9")
+        self.assertEqual(tray_icon_text(12.3), "12")
+        self.assertEqual(tray_icon_font_size("4.9"), 40)
+        self.assertEqual(tray_icon_font_size("12"), 44)
+        self.assertEqual(tray_icon_font_size("100"), 36)
 
 
 if __name__ == "__main__":

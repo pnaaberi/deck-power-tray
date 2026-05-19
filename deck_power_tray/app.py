@@ -29,10 +29,10 @@ SAMPLE_SECONDS = 2
 HISTORY_SECONDS = 10 * 60
 MAX_SAMPLES = HISTORY_SECONDS // SAMPLE_SECONDS
 GRAPH_MAX_VALUE = 50.0
-TRAY_ICON_SCALE = 2
-TRAY_ICON_WIDTH = 96 * TRAY_ICON_SCALE
-TRAY_ICON_HEIGHT = 32 * TRAY_ICON_SCALE
-TRAY_TEXT_WIDTH = 78 * TRAY_ICON_SCALE
+TRAY_ICON_WIDTH = 64
+TRAY_ICON_HEIGHT = 64
+TRAY_STATUS_STRIP_WIDTH = 6
+TRAY_TEXT_WIDTH = TRAY_ICON_WIDTH - TRAY_STATUS_STRIP_WIDTH
 SNI_IFACE = "org.kde.StatusNotifierItem"
 PROPS_IFACE = "org.freedesktop.DBus.Properties"
 WATCHER_BUS = "org.kde.StatusNotifierWatcher"
@@ -478,8 +478,7 @@ class TrayApp:
         return True
 
     def update_tray(self, sample: Sample) -> None:
-        suffix = "W"
-        text = f"{sample.watts:.0f}{suffix}" if sample.watts >= 10 else f"{sample.watts:.1f}{suffix}"
+        text = tray_icon_text(sample.watts)
         color = "#2d9c5b" if sample.ac_online else "#c96d2d"
         if sample.status.lower() == "full":
             color = "#2f80ed"
@@ -505,19 +504,19 @@ class TrayApp:
         xb, yb, tw, th, _xa, _ya = ctx.text_extents(text)
         ctx.set_source_rgba(0, 0, 0, 0.58)
         ctx.move_to(
-            (TRAY_TEXT_WIDTH - tw) / 2 - xb + 2 * TRAY_ICON_SCALE,
-            (TRAY_ICON_HEIGHT - th) / 2 - yb + TRAY_ICON_SCALE,
+            (TRAY_TEXT_WIDTH - tw) / 2 - xb + 2,
+            (TRAY_ICON_HEIGHT - th) / 2 - yb + 1,
         )
         ctx.show_text(text)
         ctx.set_source_rgba(0.93, 0.95, 0.98, 0.98)
         ctx.move_to(
-            (TRAY_TEXT_WIDTH - tw) / 2 - xb + TRAY_ICON_SCALE,
+            (TRAY_TEXT_WIDTH - tw) / 2 - xb,
             (TRAY_ICON_HEIGHT - th) / 2 - yb,
         )
         ctx.show_text(text)
 
         ctx.set_source_rgb(*hex_to_rgb(dot_color))
-        ctx.arc(89 * TRAY_ICON_SCALE, 16 * TRAY_ICON_SCALE, 4.0 * TRAY_ICON_SCALE, 0, math.tau)
+        ctx.rectangle(TRAY_ICON_WIDTH - TRAY_STATUS_STRIP_WIDTH, 7, TRAY_STATUS_STRIP_WIDTH, 50)
         ctx.fill()
         surface.flush()
         surface.write_to_png(str(self.icon_path))
@@ -550,7 +549,17 @@ def round_rect(ctx, x, y, w, h, r):
 
 
 def tray_icon_font_size(text: str) -> int:
-    return (25 if len(text) <= 3 else 22 if len(text) <= 4 else 18) * TRAY_ICON_SCALE
+    if text == "ERR":
+        return 32
+    if "." in text:
+        return 40
+    if len(text) <= 2:
+        return 44
+    return 36
+
+
+def tray_icon_text(watts: float) -> str:
+    return f"{watts:.1f}" if watts < 10 else f"{watts:.0f}"
 
 
 def cairo_surface_to_sni_pixmap(surface: cairo.ImageSurface):
