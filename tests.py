@@ -12,6 +12,7 @@ from deck_power_tray.app import (
     find_supplies,
     tray_icon_font_size,
     tray_icon_text,
+    tray_icon_uses_colored_decimal_dot,
 )
 
 
@@ -94,6 +95,8 @@ class BatteryReaderTests(unittest.TestCase):
         self.assertEqual(tray_icon_font_size("4.9"), 40)
         self.assertEqual(tray_icon_font_size("12"), 44)
         self.assertEqual(tray_icon_font_size("100"), 36)
+        self.assertTrue(tray_icon_uses_colored_decimal_dot("4.9"))
+        self.assertFalse(tray_icon_uses_colored_decimal_dot("12"))
 
 
 if __name__ == "__main__":

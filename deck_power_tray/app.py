@@ -32,6 +32,8 @@ GRAPH_MAX_VALUE = 50.0
 TRAY_ICON_WIDTH = 64
 TRAY_ICON_HEIGHT = 64
 TRAY_STATUS_DOT_RADIUS = 5.0
+TRAY_DECIMAL_DOT_RADIUS = 5.2
+TRAY_DECIMAL_DOT_GAP = 10
 TRAY_TEXT_WIDTH = TRAY_ICON_WIDTH
 SNI_IFACE = "org.kde.StatusNotifierItem"
 PROPS_IFACE = "org.freedesktop.DBus.Properties"
@@ -501,23 +503,13 @@ class TrayApp:
 
         ctx.select_font_face("Sans", cairo.FONT_SLANT_NORMAL, cairo.FONT_WEIGHT_BOLD)
         ctx.set_font_size(tray_icon_font_size(text))
-        xb, yb, tw, th, _xa, _ya = ctx.text_extents(text)
-        ctx.set_source_rgba(0, 0, 0, 0.58)
-        ctx.move_to(
-            (TRAY_TEXT_WIDTH - tw) / 2 - xb + 2,
-            (TRAY_ICON_HEIGHT - th) / 2 - yb + 1,
-        )
-        ctx.show_text(text)
-        ctx.set_source_rgba(0.93, 0.95, 0.98, 0.98)
-        ctx.move_to(
-            (TRAY_TEXT_WIDTH - tw) / 2 - xb,
-            (TRAY_ICON_HEIGHT - th) / 2 - yb,
-        )
-        ctx.show_text(text)
-
-        ctx.set_source_rgb(*hex_to_rgb(dot_color))
-        ctx.arc(TRAY_ICON_WIDTH - 7, 9, TRAY_STATUS_DOT_RADIUS, 0, math.tau)
-        ctx.fill()
+        if tray_icon_uses_colored_decimal_dot(text):
+            draw_decimal_tray_text(ctx, text, dot_color)
+        else:
+            draw_plain_tray_text(ctx, text)
+            ctx.set_source_rgb(*hex_to_rgb(dot_color))
+            ctx.arc(TRAY_ICON_WIDTH - 7, 9, TRAY_STATUS_DOT_RADIUS, 0, math.tau)
+            ctx.fill()
         surface.flush()
         surface.write_to_png(str(self.icon_path))
         self.icon_pixmap = cairo_surface_to_sni_pixmap(surface)
@@ -560,6 +552,52 @@ def tray_icon_font_size(text: str) -> int:
 
 def tray_icon_text(watts: float) -> str:
     return f"{watts:.1f}" if watts < 10 else f"{watts:.0f}"
+
+
+def tray_icon_uses_colored_decimal_dot(text: str) -> bool:
+    return "." in text
+
+
+def draw_plain_tray_text(ctx, text: str) -> None:
+    xb, yb, tw, th, _xa, _ya = ctx.text_extents(text)
+    x = (TRAY_TEXT_WIDTH - tw) / 2 - xb
+    y = (TRAY_ICON_HEIGHT - th) / 2 - yb
+    ctx.set_source_rgba(0, 0, 0, 0.58)
+    ctx.move_to(x + 2, y + 1)
+    ctx.show_text(text)
+    ctx.set_source_rgba(0.93, 0.95, 0.98, 0.98)
+    ctx.move_to(x, y)
+    ctx.show_text(text)
+
+
+def draw_decimal_tray_text(ctx, text: str, dot_color: str) -> None:
+    left, right = text.split(".", 1)
+    lxb, lyb, left_w, left_h, _lxa, _lya = ctx.text_extents(left)
+    rxb, _ryb, right_w, _right_h, _rxa, _rya = ctx.text_extents(right)
+    text_w = left_w + TRAY_DECIMAL_DOT_GAP + right_w
+    baseline = (TRAY_ICON_HEIGHT - left_h) / 2 - lyb
+    x = (TRAY_TEXT_WIDTH - text_w) / 2
+    left_x = x - lxb
+    right_x = x + left_w + TRAY_DECIMAL_DOT_GAP - rxb
+    dot_x = x + left_w + TRAY_DECIMAL_DOT_GAP / 2
+    dot_y = baseline - TRAY_DECIMAL_DOT_RADIUS
+
+    ctx.set_source_rgba(0, 0, 0, 0.58)
+    ctx.move_to(left_x + 2, baseline + 1)
+    ctx.show_text(left)
+    ctx.move_to(right_x + 2, baseline + 1)
+    ctx.show_text(right)
+    ctx.arc(dot_x + 2, dot_y + 1, TRAY_DECIMAL_DOT_RADIUS, 0, math.tau)
+    ctx.fill()
+
+    ctx.set_source_rgba(0.93, 0.95, 0.98, 0.98)
+    ctx.move_to(left_x, baseline)
+    ctx.show_text(left)
+    ctx.move_to(right_x, baseline)
+    ctx.show_text(right)
+    ctx.set_source_rgb(*hex_to_rgb(dot_color))
+    ctx.arc(dot_x, dot_y, TRAY_DECIMAL_DOT_RADIUS, 0, math.tau)
+    ctx.fill()
 
 
 def cairo_surface_to_sni_pixmap(surface: cairo.ImageSurface):
