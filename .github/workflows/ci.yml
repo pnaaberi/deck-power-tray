@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            desktop-file-utils \
+            gir1.2-gtk-3.0 \
+            python3-cairo \
+            python3-dbus \
+            python3-gi
+
+      - name: Run tests
+        env:
+          NO_AT_BRIDGE: "1"
+        run: /usr/bin/python3 tests.py -v
+
+      - name: Check syntax
+        run: |
+          /usr/bin/python3 -m py_compile deck_power_tray/app.py tests.py
+          sh -n deck-power-tray install.sh uninstall.sh
+          git diff --check
+
+      - name: Check isolated install
+        env:
+          NO_AT_BRIDGE: "1"
+        run: |
+          set -eu
+          tmp=$(mktemp -d)
+          trap 'rm -rf "$tmp"' EXIT
+          app="$tmp/Power Tray"
+          mkdir -p "$app"
+          cp -a . "$app"
+          XDG_CONFIG_HOME="$tmp/config home" \
+            XDG_DATA_HOME="$tmp/data home" \
+            "$app/install.sh"
+          desktop-file-validate \
+            "$tmp/config home/autostart/deck-power-tray.desktop" \
+            "$tmp/data home/applications/deck-power-tray.desktop"
+          XDG_CONFIG_HOME="$tmp/config home" \
+            XDG_DATA_HOME="$tmp/data home" \
+            "$app/uninstall.sh"
+          test ! -e "$tmp/config home/autostart/deck-power-tray.desktop"
+          test ! -e "$tmp/data home/applications/deck-power-tray.desktop"

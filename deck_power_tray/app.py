@@ -25,6 +25,7 @@ POWER_SUPPLY = Path(os.environ.get("DECK_POWER_TRAY_POWER_SUPPLY", "/sys/class/p
 APP_ROOT = Path(__file__).resolve().parents[1]
 APP_ICON = APP_ROOT / "icons" / "deck-power-tray.svg"
 APP_COMMAND = APP_ROOT / "deck-power-tray"
+APP_VERSION = "0.1.0"
 SAMPLE_SECONDS = 2
 HISTORY_SECONDS = 10 * 60
 MAX_SAMPLES = HISTORY_SECONDS // SAMPLE_SECONDS
@@ -39,17 +40,25 @@ SNI_IFACE = "org.kde.StatusNotifierItem"
 PROPS_IFACE = "org.freedesktop.DBus.Properties"
 WATCHER_BUS = "org.kde.StatusNotifierWatcher"
 WATCHER_PATH = "/StatusNotifierWatcher"
+APP_BUS = "io.github.deckpowertray.App"
+APP_IFACE = "io.github.deckpowertray.Application"
+SNI_PATH = "/StatusNotifierItem"
+WATCHER_RETRY_SECONDS = 5
 
 
 @dataclass
 class Sample:
     ts: float
     watts: float
-    volts: float
-    amps: float
+    volts: float | None
+    amps: float | None
     capacity: int | None
     status: str
     ac_online: bool | None
+
+
+class BatteryReadError(RuntimeError):
+    pass
 
 
 def _read(path: Path) -> str | None:
@@ -67,6 +76,16 @@ def _read_int(path: Path) -> int | None:
         return int(raw)
     except ValueError:
         return None
+
+
+def _read_required_int(path: Path) -> int:
+    raw = _read(path)
+    if raw is None:
+        raise BatteryReadError(f"Missing battery reading: {path.name}")
+    try:
+        return int(raw)
+    except ValueError as exc:
+        raise BatteryReadError(f"Invalid battery reading: {path.name}") from exc
 
 
 def find_supplies(base: Path) -> tuple[Path | None, Path | None]:
@@ -88,24 +107,32 @@ class BatteryReader:
     def read(self) -> Sample:
         battery, ac = find_supplies(self.base)
         if battery is None:
-            raise RuntimeError(f"No battery found under {self.base}")
+            raise BatteryReadError(f"No battery found under {self.base}")
 
-        voltage_uv = _read_int(battery / "voltage_now")
-        current_ua = _read_int(battery / "current_now")
         power_uw = _read_int(battery / "power_now")
+        if power_uw is None:
+            voltage_uv = _read_required_int(battery / "voltage_now")
+            current_ua = _read_required_int(battery / "current_now")
+            power_uw = (voltage_uv * current_ua) // 1_000_000
+        else:
+            voltage_uv = _read_int(battery / "voltage_now")
+            current_ua = _read_int(battery / "current_now")
         capacity = _read_int(battery / "capacity")
         status = _read(battery / "status") or "Unknown"
 
-        if power_uw is None and voltage_uv is not None and current_ua is not None:
-            power_uw = (voltage_uv * current_ua) // 1_000_000
+        if voltage_uv is not None and voltage_uv <= 0:
+            raise BatteryReadError("Invalid battery reading: voltage_now")
+        if capacity is not None and not 0 <= capacity <= 100:
+            raise BatteryReadError("Invalid battery reading: capacity")
 
-        volts = (voltage_uv or 0) / 1_000_000
-        amps = (current_ua or 0) / 1_000_000
-        watts = (power_uw or 0) / 1_000_000
+        volts = voltage_uv / 1_000_000 if voltage_uv is not None else None
+        amps = current_ua / 1_000_000 if current_ua is not None else None
+        watts = power_uw / 1_000_000
 
         ac_online = None
         if ac is not None:
-            ac_online = (_read_int(ac / "online") or 0) == 1
+            online = _read_int(ac / "online")
+            ac_online = None if online is None else online == 1
 
         return Sample(time.time(), watts, volts, amps, capacity, status, ac_online)
 
@@ -178,7 +205,9 @@ class GraphWindow(Gtk.Window):
             charge = f"{current.capacity}%" if current.capacity is not None else "n/a"
             ac = "AC on" if current.ac_online else "AC off" if current.ac_online is False else "AC n/a"
             text = (
-                f"{current.watts:.1f} W   {current.volts:.2f} V   {current.amps:.2f} A"
+                f"{format_measurement(current.watts, 'W', 1)}"
+                f"   {format_measurement(current.volts, 'V', 2)}"
+                f"   {format_measurement(current.amps, 'A', 2)}"
                 f"   {charge}   {current.status}   {ac}"
             )
         self.summary.set_text(text)
@@ -202,7 +231,7 @@ class GraphWindow(Gtk.Window):
                 enable_autostart()
             else:
                 disable_autostart()
-        except OSError as exc:
+        except (OSError, ValueError) as exc:
             button.handler_block(self.autostart_handler)
             button.set_active(autostart_enabled())
             button.handler_unblock(self.autostart_handler)
@@ -270,7 +299,7 @@ class GraphWindow(Gtk.Window):
         for name, color, getter, _scale, unit in series:
             value = getter(samples[-1])
             self._swatch(ctx, x, 12, color)
-            self._label(ctx, x + 18, 22, f"{name} {value:.2f} {unit}")
+            self._label(ctx, x + 18, 22, f"{name} {format_measurement(value, unit, 2)}")
             x += 142
         return False
 
@@ -292,9 +321,9 @@ class GraphWindow(Gtk.Window):
         ctx.stroke()
 
         values = [
-            ("#f2c94c", f"{sample.watts:.1f} W"),
-            ("#56ccf2", f"{sample.volts:.2f} V"),
-            ("#6fcf97", f"{sample.amps:.2f} A"),
+            ("#f2c94c", format_measurement(sample.watts, "W", 1)),
+            ("#56ccf2", format_measurement(sample.volts, "V", 2)),
+            ("#6fcf97", format_measurement(sample.amps, "A", 2)),
         ]
         box_w = 72
         box_h = 62
@@ -345,8 +374,12 @@ class GraphWindow(Gtk.Window):
         ctx.set_line_width(2.4)
         first = True
         for sample in samples:
+            value = getter(sample)
+            if value is None:
+                first = True
+                continue
             x = pad_l + ((sample.ts - start) / HISTORY_SECONDS) * plot_w
-            y = pad_t + plot_h - (getter(sample) / scale) * plot_h
+            y = pad_t + plot_h - (value / scale) * plot_h
             y = max(pad_t, min(pad_t + plot_h, y))
             if first:
                 ctx.move_to(x, y)
@@ -369,18 +402,61 @@ class GraphWindow(Gtk.Window):
 
 
 class StatusNotifierItem(dbus.service.Object):
-    def __init__(self, app: "TrayApp"):
+    def __init__(self, app: "TrayApp", bus, bus_name):
         self.app = app
-        self.bus = dbus.SessionBus()
-        self.service_name = f"org.kde.StatusNotifierItem-{os.getpid()}-1"
-        self.bus_name = dbus.service.BusName(self.service_name, bus=self.bus, allow_replacement=True)
-        super().__init__(self.bus_name, "/StatusNotifierItem")
+        self.bus = bus
+        self.service_name = APP_BUS
+        self.bus_name = bus_name
+        self.registered = False
+        self.registration_retry_id: int | None = None
+        super().__init__(self.bus_name, SNI_PATH)
 
-        watcher = self.bus.get_object(WATCHER_BUS, WATCHER_PATH)
-        watcher.RegisterStatusNotifierItem(
-            self.service_name,
-            dbus_interface=WATCHER_BUS,
+        self.bus.add_signal_receiver(
+            self._watcher_owner_changed,
+            signal_name="NameOwnerChanged",
+            dbus_interface="org.freedesktop.DBus",
+            bus_name="org.freedesktop.DBus",
+            arg0=WATCHER_BUS,
         )
+        self.ensure_registered()
+
+    def register_with_watcher(self) -> bool:
+        try:
+            if not self.bus.name_has_owner(WATCHER_BUS):
+                self.registered = False
+                return False
+            watcher = self.bus.get_object(WATCHER_BUS, WATCHER_PATH)
+            watcher.RegisterStatusNotifierItem(
+                self.service_name,
+                dbus_interface=WATCHER_BUS,
+            )
+        except dbus.exceptions.DBusException:
+            self.registered = False
+            return False
+        self.registered = True
+        return True
+
+    def ensure_registered(self) -> None:
+        if self.register_with_watcher():
+            if self.registration_retry_id is not None:
+                GLib.source_remove(self.registration_retry_id)
+                self.registration_retry_id = None
+            return
+        if self.registration_retry_id is None:
+            self.registration_retry_id = GLib.timeout_add_seconds(
+                WATCHER_RETRY_SECONDS,
+                self._retry_registration,
+            )
+
+    def _retry_registration(self) -> bool:
+        if self.register_with_watcher():
+            self.registration_retry_id = None
+            return False
+        return True
+
+    def _watcher_owner_changed(self, _name, _old_owner, _new_owner) -> None:
+        self.registered = False
+        self.ensure_registered()
 
     def properties(self) -> dict[str, object]:
         return {
@@ -448,18 +524,22 @@ class StatusNotifierItem(dbus.service.Object):
     def NewStatus(self, _status):
         return
 
+    @dbus.service.method(APP_IFACE, in_signature="", out_signature="")
+    def Quit(self):
+        GLib.idle_add(Gtk.main_quit)
+
 
 class TrayApp:
-    def __init__(self, show_on_start: bool = False):
+    def __init__(self, bus, bus_name, show_on_start: bool = False):
         self.reader = BatteryReader()
         self.history: list[Sample] = []
         self.last_icon: tuple[str, str] | None = None
+        self.last_error: str | None = None
         self.title = "Deck Power"
         self.tooltip = sni_tooltip("Deck Power", "Waiting for battery data")
         self.icon_pixmap = dbus.Array([], signature="(iiay)")
-        self.icon_path = Path(tempfile.gettempdir()) / f"deck-power-tray-{os.getuid()}.png"
         self.window = GraphWindow(self)
-        self.tray = StatusNotifierItem(self)
+        self.tray = StatusNotifierItem(self, bus, bus_name)
 
         self.poll()
         if show_on_start:
@@ -469,15 +549,29 @@ class TrayApp:
     def poll(self):
         try:
             sample = self.reader.read()
-            self.history.append(sample)
-            self.history = self.history[-MAX_SAMPLES:]
-            self.update_tray(sample)
-            self.window.refresh()
-        except Exception as exc:
-            self.tooltip = sni_tooltip("Deck Power", str(exc))
-            self.draw_icon("ERR", "#a33")
-            self.tray.NewToolTip()
+        except BatteryReadError as exc:
+            self.update_error(exc)
+            return True
+
+        self.last_error = None
+        self.history.append(sample)
+        self.history = self.history[-MAX_SAMPLES:]
+        self.update_tray(sample)
+        self.window.refresh()
         return True
+
+    def update_error(self, exc: Exception) -> None:
+        message = str(exc)
+        icon = ("ERR", "#a33")
+        if self.last_icon != icon:
+            self.draw_icon(*icon)
+            self.last_icon = icon
+            self.tray.NewIcon()
+        self.tooltip = sni_tooltip("Deck Power", message)
+        self.tray.NewToolTip()
+        if self.last_error != message:
+            print(f"Deck Power: {message}", file=sys.stderr)
+        self.last_error = message
 
     def update_tray(self, sample: Sample) -> None:
         text = tray_icon_text(sample.watts)
@@ -491,7 +585,9 @@ class TrayApp:
         charge = f"{sample.capacity}%" if sample.capacity is not None else "n/a"
         self.tooltip = sni_tooltip(
             "Deck Power",
-            f"{sample.watts:.1f} W  {sample.volts:.2f} V  {sample.amps:.2f} A\n{sample.status}, {charge}",
+            f"{format_measurement(sample.watts, 'W', 1)}"
+            f"  {format_measurement(sample.volts, 'V', 2)}"
+            f"  {format_measurement(sample.amps, 'A', 2)}\n{sample.status}, {charge}",
         )
         self.tray.NewToolTip()
 
@@ -511,7 +607,6 @@ class TrayApp:
             ctx.arc(TRAY_ICON_WIDTH - 7, 9, TRAY_STATUS_DOT_RADIUS, 0, math.tau)
             ctx.fill()
         surface.flush()
-        surface.write_to_png(str(self.icon_path))
         self.icon_pixmap = cairo_surface_to_sni_pixmap(surface)
 
     def toggle_window(self, *_args) -> None:
@@ -528,7 +623,17 @@ class TrayApp:
 
 def hex_to_rgb(value: str) -> tuple[float, float, float]:
     value = value.lstrip("#")
+    if len(value) == 3:
+        value = "".join(char * 2 for char in value)
+    if len(value) != 6:
+        raise ValueError(f"Invalid RGB color: {value!r}")
     return tuple(int(value[i : i + 2], 16) / 255 for i in (0, 2, 4))
+
+
+def format_measurement(value: float | None, unit: str, decimals: int) -> str:
+    if value is None:
+        return f"n/a {unit}"
+    return f"{value:.{decimals}f} {unit}"
 
 
 def round_rect(ctx, x, y, w, h, r):
@@ -640,19 +745,52 @@ def sni_tooltip(title: str, body: str):
 
 def autostart_file(config_home: Path | None = None) -> Path:
     if config_home is None:
-        config_home = Path(os.environ.get("XDG_CONFIG_HOME", Path.home() / ".config"))
+        configured = os.environ.get("XDG_CONFIG_HOME")
+        config_home = (
+            Path(configured)
+            if configured and Path(configured).is_absolute()
+            else Path.home() / ".config"
+        )
     return config_home / "autostart" / "deck-power-tray.desktop"
 
 
-def desktop_entry() -> str:
-    icon = str(APP_ICON) if APP_ICON.exists() else "battery"
+def desktop_exec_arg(value: str | Path) -> str:
+    value = str(value)
+    if any(ord(char) < 32 or ord(char) == 127 for char in value):
+        raise ValueError("application path contains a control character")
+    if "=" in value:
+        raise ValueError("application path contains '='")
+    if "%" in value:
+        raise ValueError("application path contains unsupported '%' character")
+
+    escapes = {
+        "\\": "\\\\\\\\",
+        '"': '\\\\"',
+        "`": "\\\\`",
+        "$": "\\\\$",
+    }
+    return '"' + "".join(escapes.get(char, char) for char in value) + '"'
+
+
+def desktop_string(value: str | Path) -> str:
+    value = str(value)
+    if any(ord(char) < 32 or ord(char) == 127 for char in value):
+        raise ValueError("desktop entry value contains a control character")
+    return value.replace("\\", "\\\\")
+
+
+def desktop_entry(show_on_start: bool = False) -> str:
+    icon = desktop_string(APP_ICON) if APP_ICON.exists() else "battery"
+    command = desktop_exec_arg(APP_COMMAND)
+    if show_on_start:
+        command += " --show"
     return "\n".join(
         [
             "[Desktop Entry]",
             "Type=Application",
             "Name=Deck Power Tray",
             "Comment=Show Steam Deck battery watts in the system tray",
-            f"Exec={APP_COMMAND}",
+            f"Exec={command}",
             f"Icon={icon}",
             "Terminal=false",
             "StartupWMClass=deck-power-tray",
@@ -666,15 +804,47 @@ def autostart_enabled(config_home: Path | None = None) -> bool:
     path = autostart_file(config_home)
     if not path.exists():
         return False
-    return f"Exec={APP_COMMAND}" in (_read(path) or "")
+
+    entry = GLib.KeyFile()
+    try:
+        entry.load_from_file(str(path), GLib.KeyFileFlags.NONE)
+        command = entry.get_string("Desktop Entry", "Exec")
+    except GLib.Error:
+        return False
+
+    for key in ("Hidden", "X-GNOME-Autostart-enabled"):
+        try:
+            enabled = entry.get_boolean("Desktop Entry", key)
+        except GLib.Error:
+            continue
+        if key == "Hidden" and enabled:
+            return False
+        if key == "X-GNOME-Autostart-enabled" and not enabled:
+            return False
+    return command == desktop_exec_arg(APP_COMMAND)
 
 
 def enable_autostart(config_home: Path | None = None) -> Path:
     path = autostart_file(config_home)
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(f".{path.name}.tmp.{os.getpid()}")
-    tmp.write_text(desktop_entry(), encoding="utf-8")
-    tmp.replace(path)
+    tmp: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=path.parent,
+            prefix=f".{path.name}.tmp.",
+            delete=False,
+        ) as handle:
+            tmp = Path(handle.name)
+            handle.write(desktop_entry())
+            handle.flush()
+            os.fsync(handle.fileno())
+        tmp.chmod(0o644)
+        tmp.replace(path)
+    finally:
+        if tmp is not None:
+            tmp.unlink(missing_ok=True)
     return path
 
 
@@ -687,15 +857,51 @@ def disable_autostart(config_home: Path | None = None) -> bool:
         return False
 
 
+def call_running_instance(bus, method: str, interface: str, *args) -> bool:
+    try:
+        proxy = bus.get_object(APP_BUS, SNI_PATH)
+        proxy.get_dbus_method(method, interface)(*args)
+    except dbus.exceptions.DBusException:
+        return False
+    return True
+
+
 def main() -> int:
     dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
     GLib.set_prgname("deck-power-tray")
     GLib.set_application_name("Deck Power Tray")
-    show_on_start = "--show" in sys.argv[1:]
-    app = TrayApp(show_on_start=show_on_start)
-    if not app.history:
-        return 1
-    Gtk.main()
+
+    args = set(sys.argv[1:])
+    unknown = args - {"--help", "--show", "--quit", "--version"}
+    if unknown:
+        print(f"Unknown option: {sorted(unknown)[0]}", file=sys.stderr)
+        return 2
+    if "--help" in args:
+        print("usage: deck-power-tray [--help | --show | --quit | --version]")
+        return 0
+    if "--version" in args:
+        print(f"Deck Power Tray {APP_VERSION}")
+        return 0
+
+    bus = dbus.SessionBus()
+    if "--quit" in args:
+        call_running_instance(bus, "Quit", APP_IFACE)
+        return 0
+
+    show_on_start = "--show" in args
+    try:
+        bus_name = dbus.service.BusName(APP_BUS, bus=bus, do_not_queue=True)
+    except dbus.exceptions.NameExistsException:
+        if show_on_start:
+            call_running_instance(bus, "Activate", SNI_IFACE, 0, 0)
+        return 0
+
+    app = TrayApp(bus, bus_name, show_on_start=show_on_start)
+    try:
+        Gtk.main()
+    except KeyboardInterrupt:
+        pass
+    del app
     return 0
 
 
