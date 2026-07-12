@@ -159,6 +159,9 @@ class AutostartTests(unittest.TestCase):
             path.write_text(desktop_entry() + "Hidden=true\n", encoding="utf-8")
             self.assertFalse(autostart_enabled(config_home))
 
+            path.write_text(desktop_entry(show_on_start=True), encoding="utf-8")
+            self.assertFalse(autostart_enabled(config_home))
+
             path.write_text("not a desktop entry\n", encoding="utf-8")
             self.assertFalse(autostart_enabled(config_home))
 
@@ -199,6 +202,43 @@ class AutostartTests(unittest.TestCase):
         for value in ("/tmp/percent%dir/app", "/tmp/equal=dir/app", "/tmp/new\nline/app"):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 desktop_exec_arg(value)
+
+    def test_autostart_enabled_handles_desktop_exec_escapes(self):
+        escaped_directories = ('dollar$dir', 'quote"dir', "tick`dir", "slash\\dir")
+        with tempfile.TemporaryDirectory() as tmp:
+            config_home = Path(tmp) / "config"
+            for directory in escaped_directories:
+                with self.subTest(directory=directory), patch(
+                    "deck_power_tray.app.APP_COMMAND",
+                    Path(tmp) / directory / "deck-power-tray",
+                ):
+                    enable_autostart(config_home)
+                    self.assertTrue(autostart_enabled(config_home))
+
+    def test_autostart_enabled_accepts_equivalent_keyfile_escaping(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_home = Path(tmp) / "config"
+            command = Path(tmp) / "Power Tray" / "deck-power-tray"
+            with patch("deck_power_tray.app.APP_COMMAND", command):
+                path = enable_autostart(config_home)
+                encoded = desktop_exec_arg(command)
+                equivalent = encoded.replace("Power Tray", r"Power\sTray")
+                entry = path.read_text(encoding="utf-8").replace(
+                    f"Exec={encoded}",
+                    f"Exec={equivalent}",
+                )
+                path.write_text(entry, encoding="utf-8")
+
+                self.assertTrue(autostart_enabled(config_home))
+
+    def test_autostart_enabled_handles_utf8_path(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            config_home = Path(tmp) / "config"
+            directory = "unicode-" + "\u00e9" * 8 + "-dir"
+            command = Path(tmp) / directory / "deck-power-tray"
+            with patch("deck_power_tray.app.APP_COMMAND", command):
+                enable_autostart(config_home)
+                self.assertTrue(autostart_enabled(config_home))
 
     def test_application_entry_shows_window_but_autostart_entry_does_not(self):
         self.assertNotIn(" --show", desktop_entry(show_on_start=False))

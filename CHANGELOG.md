@@ -4,6 +4,12 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-07-12
+
+### Fixed
+
+- Autostart status detection now handles source paths containing desktop-entry escape characters
+
 ## [0.1.0] - 2026-07-12
 
 ### Added
@@ -24,5 +30,6 @@ All notable changes to this project are documented here. The format follows [Kee
 - Installer files are staged, validated, mode-stable, and cleaned after failure
 - Removed the predictable temporary PNG write
 
-[Unreleased]: https://github.com/pnaaberi/deck-power-tray/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/pnaaberi/deck-power-tray/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/pnaaberi/deck-power-tray/releases/tag/v0.1.1
 [0.1.0]: https://github.com/pnaaberi/deck-power-tray/releases/tag/v0.1.0

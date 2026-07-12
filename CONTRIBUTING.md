@@ -25,7 +25,7 @@ git diff --check
 
 Behavior changes need focused regression tests. Installer and autostart changes also need temporary-directory checks for:
 
-- A source path containing spaces
+- A source path containing spaces, UTF-8 characters, and supported desktop-entry escape characters
 - Absolute custom `XDG_CONFIG_HOME` and `XDG_DATA_HOME`
 - An unset `HOME` when both XDG paths are set
 - Reinstall over existing entries

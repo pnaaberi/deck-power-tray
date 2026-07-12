@@ -20,7 +20,7 @@ git diff --check
 
 Also verify on a Steam Deck in Desktop Mode:
 
-1. Install from a path containing a space.
+1. Install from a path containing spaces, dollar signs, double quotes, backticks, and a literal backslash.
 2. Reinstall over the existing desktop entries.
 3. Start from autostart and from the application launcher.
 4. Confirm repeated launches keep one tray process and one tray item.
@@ -31,12 +31,18 @@ Also verify on a Steam Deck in Desktop Mode:
 ## Publish
 
 1. Commit the release changes with a clean working tree.
-2. Create an annotated tag: `git tag -a v0.1.0 -m "Deck Power Tray 0.1.0"`. Use `-s` instead of `-a` when a Git signing key is configured.
-3. Push the branch and tag while the repository is still private.
+2. Create an annotated tag: `git tag -a vX.Y.Z -m "Deck Power Tray X.Y.Z"`. Use `-s` instead of `-a` when a Git signing key is configured.
+3. Push the branch and tag.
 4. Confirm the GitHub Actions workflow passes on the tag.
-5. Change repository visibility to public.
-6. Enable private vulnerability reporting in **Settings > Security > Code security**.
-7. Create a GitHub release from the matching CHANGELOG section.
-8. Confirm the repository license is detected as MIT and the public README renders correctly.
+5. Create a GitHub release from the matching CHANGELOG section.
+6. Download the public tag archive and repeat the automated and installer checks from the extracted source.
+7. Confirm the release is marked latest, the repository license is detected as MIT, and the public README renders correctly.
 
-Do not make the repository public until the preflight and verification checks are complete.
+## First Public Release
+
+For the first public release only:
+
+1. Keep the repository private until the preflight and verification checks are complete.
+2. Check commit and tag metadata for private names, email addresses, logs, and generated state.
+3. Change repository visibility to public only after branch and tag checks pass.
+4. Enable private vulnerability reporting in **Settings > Security > Code security**.

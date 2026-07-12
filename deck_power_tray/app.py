@@ -25,7 +25,7 @@ POWER_SUPPLY = Path(os.environ.get("DECK_POWER_TRAY_POWER_SUPPLY", "/sys/class/p
 APP_ROOT = Path(__file__).resolve().parents[1]
 APP_ICON = APP_ROOT / "icons" / "deck-power-tray.svg"
 APP_COMMAND = APP_ROOT / "deck-power-tray"
-APP_VERSION = "0.1.0"
+APP_VERSION = "0.1.1"
 SAMPLE_SECONDS = 2
 HISTORY_SECONDS = 10 * 60
 MAX_SAMPLES = HISTORY_SECONDS // SAMPLE_SECONDS
@@ -806,10 +806,18 @@ def autostart_enabled(config_home: Path | None = None) -> bool:
         return False
 
     entry = GLib.KeyFile()
+    expected = GLib.KeyFile()
     try:
         entry.load_from_file(str(path), GLib.KeyFileFlags.NONE)
         command = entry.get_string("Desktop Entry", "Exec")
-    except GLib.Error:
+        expected_data = desktop_entry()
+        expected.load_from_data(
+            expected_data,
+            len(expected_data.encode("utf-8")),
+            GLib.KeyFileFlags.NONE,
+        )
+        expected_command = expected.get_string("Desktop Entry", "Exec")
+    except (GLib.Error, ValueError):
         return False
 
     for key in ("Hidden", "X-GNOME-Autostart-enabled"):
@@ -821,7 +829,7 @@ def autostart_enabled(config_home: Path | None = None) -> bool:
             return False
         if key == "X-GNOME-Autostart-enabled" and not enabled:
             return False
-    return command == desktop_exec_arg(APP_COMMAND)
+    return command == expected_command
 
 
 def enable_autostart(config_home: Path | None = None) -> Path:
