@@ -31,7 +31,7 @@ Also verify on a Steam Deck in Desktop Mode:
 ## Publish
 
 1. Commit the release changes with a clean working tree.
-2. Tag the commit: `git tag -s v0.1.0 -m "Deck Power Tray 0.1.0"`.
+2. Create an annotated tag: `git tag -a v0.1.0 -m "Deck Power Tray 0.1.0"`. Use `-s` instead of `-a` when a Git signing key is configured.
 3. Push the branch and tag while the repository is still private.
 4. Confirm the GitHub Actions workflow passes on the tag.
 5. Change repository visibility to public.
