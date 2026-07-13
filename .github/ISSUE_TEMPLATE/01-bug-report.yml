@@ -1,0 +1,73 @@
+name: Bug report
+description: Report reproducible behavior in the tray, graph, installer, or uninstaller
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not report security vulnerabilities in a public issue. Use the private security reporting link in the issue chooser instead.
+
+        Remove personal paths, battery history, and unrelated system logs before submitting.
+  - type: input
+    id: version
+    attributes:
+      label: Deck Power Tray version
+      description: Run `./deck-power-tray --version` from the checkout.
+      placeholder: Deck Power Tray x.y.z
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: System
+      description: Include the device, Linux distribution or SteamOS version, and KDE Plasma version.
+      placeholder: Steam Deck OLED, SteamOS 3.x, Plasma 6.x
+    validations:
+      required: true
+  - type: dropdown
+    id: session
+    attributes:
+      label: Display session
+      options:
+        - Wayland
+        - X11
+        - Unknown
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Observed and expected behavior
+      description: State what happened and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Give the shortest reliable sequence, including whether the app was started from autostart, the launcher, or a terminal.
+      placeholder: |
+        1. Start Deck Power Tray using ...
+        2. ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Include only relevant, redacted output. Do not include full journals or screenshots of the desktop.
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues for this behavior.
+          required: true
+        - label: I removed secrets, private paths, and unrelated logs.
+          required: true
+        - label: This is not a security vulnerability.
+          required: true

@@ -2,6 +2,8 @@
 
 Contributions should stay small and match the app's Steam Deck and KDE focus.
 
+Report security vulnerabilities privately by following [SECURITY.md](SECURITY.md), not through a public issue or pull request.
+
 ## Setup
 
 Use Python 3.10 or newer with GTK 3, Cairo, and D-Bus bindings. SteamOS normally provides these dependencies.

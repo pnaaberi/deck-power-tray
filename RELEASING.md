@@ -6,6 +6,7 @@
 2. Move relevant entries from `Unreleased` into a dated CHANGELOG section.
 3. Confirm README install, uninstall, troubleshooting, and privacy details match the current code.
 4. Confirm the repository contains no secrets, private logs, generated screenshots, or user-specific state.
+5. Confirm CI passes and CodeQL, secret scanning, and Dependabot have no unresolved release blockers.
 
 ## Verify
 
@@ -37,12 +38,3 @@ Also verify on a Steam Deck in Desktop Mode:
 5. Create a GitHub release from the matching CHANGELOG section.
 6. Download the public tag archive and repeat the automated and installer checks from the extracted source.
 7. Confirm the release is marked latest, the repository license is detected as MIT, and the public README renders correctly.
-
-## First Public Release
-
-For the first public release only:
-
-1. Keep the repository private until the preflight and verification checks are complete.
-2. Check commit and tag metadata for private names, email addresses, logs, and generated state.
-3. Change repository visibility to public only after branch and tag checks pass.
-4. Enable private vulnerability reporting in **Settings > Security > Code security**.

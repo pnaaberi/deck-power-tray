@@ -1,0 +1,45 @@
+name: Feature request
+description: Propose a focused improvement for Steam Deck or KDE tray use
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Deck Power Tray stays focused on local Steam Deck battery data and KDE system-tray workflows.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the workflow or limitation this request would improve.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the smallest user-visible change that solves the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Steam Deck and KDE context
+      description: Explain where this fits in Desktop Mode, the system tray, battery reporting, or installation.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: List any existing workflow or smaller change that could address the need.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues for this request.
+          required: true
+        - label: I understand telemetry, network access, and persistent battery history are outside the current project scope.
+          required: true
