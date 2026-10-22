@@ -4,6 +4,10 @@ All notable changes to this project are documented here. The format follows [Kee
 
 ## [Unreleased]
 
+### Documentation
+
+- Add versioned agent rules for source maintenance, disposable QA and unchanged native/privacy boundaries.
+
 ## [0.1.1] - 2026-07-12
 
 ### Fixed

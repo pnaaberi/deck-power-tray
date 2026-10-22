@@ -123,6 +123,8 @@ Persistent state is limited to the two desktop entries listed under [Install](#i
 
 ## Development
 
+Agents must follow [AGENTS.md](AGENTS.md) and use disposable test data; repository maintenance does not authorize a live desktop or autostart change.
+
 Run the test and syntax checks:
 
 ```sh
